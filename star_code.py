@@ -231,17 +231,17 @@ while True:
         if light_sensor.value <= LIGHT_THRESHOLD or LIGHT_THRESHOLD == 0:
             print(f"light sensor value meets threshold {LIGHT_THRESHOLD}")
             lights_on = True
-            play_light_show(counter)
-            counter += 1
             start_time = time.monotonic()
 
     if lights_on:
-        if LIGHT_THRESHOLD != 0:
-            print(f"light sensor value is {light_sensor.value}")
+        play_light_show(counter)
+        counter += 1
+        time.sleep(0.1)
+
+    if LIGHT_THRESHOLD != 0:
+        if lights_on:
             # It's morning and time to shut off until sunset-ish
             if light_sensor.value > LIGHT_THRESHOLD:
-                print(f"{light_sensor.value} > {LIGHT_THRESHOLD}")
-                print(f"{light_sensor.value} it's too bright, sleeping")
                 counter = 0
                 lights_on = False
                 sleep_alarm = alarm.time.TimeAlarm(monotonic_time=time.monotonic() + MIDDAY_SLEEP_TIME)
@@ -249,11 +249,9 @@ while True:
 
             # Sleep for designated time; usually this is overnight
             if time.monotonic() >= start_time + STOP_TIME:
-                print(f"{time.monotonic()} is greater than {start_time + STOP_TIME} well it's time to stop sparkling, for now")
                 counter = 0
                 lights_on = False
                 sleep_alarm = alarm.time.TimeAlarm(monotonic_time=time.monotonic() + NIGHT_SLEEP_TIME)
                 alarm.exit_and_deep_sleep_until_alarms(sleep_alarm)
-
 
     time.sleep(0.1)
