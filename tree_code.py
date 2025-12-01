@@ -132,10 +132,16 @@ def on_message(client, topic, message):
     if time_in_seconds and sunset_in_seconds:
         global running
         if not running:
-            controlLights.sleep_before_set_time(time_in_seconds, sunset_in_seconds, before_sunset, ignore_sunset, pixels)
-            running = True
+            need_sleep = controlLights.check_need_sleep(time_in_seconds, sunset_in_seconds, before_sunset, ignore_sunset)
+            if need_sleep:
+                controlLights.blank_all(pixels)
+                controlLights.sleep_before_set_time(time_in_seconds, sunset_in_seconds, before_sunset)
+                running = True
         else:
-            controlLights.shutdown(time_in_seconds, stop_time, sunset_in_seconds, sleep_time, before_sunset, pixels)
+            need_shutdown = controlLights.check_need_shutdown(time_in_seconds, stop_time, sunset_in_seconds, sleep_time, before_sunset)
+            if need_shutdown:
+                controlLights.blank_all(pixels)
+                controlLights.shutdown(time_in_seconds, sunset_in_seconds, sleep_time, before_sunset)
 
 mqtt_local_broker = os.getenv("mqtt_local_server")
 mqtt_local_port = os.getenv("mqtt_local_port")
