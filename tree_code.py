@@ -40,11 +40,15 @@ before_sunset = data["seconds_before_sunset"]
 sleep_time = data["sleep_time"]
 # Assign stop time in seconds if not set to 0
 # If set to 0 never sleep, run constantly
-if data["stop_time"] is not "0":
+if data["stop_time"] != 0:
     stop_time = timeHelper.get_time_in_seconds(data["stop_time"])
 else:
     stop_time = int(data["stop_time"])
-ignore_sunset = bool(data["ignore_sunset"])
+ignore_sunset_string = data["ignore_sunset"]
+if ignore_sunset_string is "False":
+    ignore_sunset = False
+else:
+    ignore_sunset = True
 running = False
 time_in_seconds = None
 sunset_in_seconds = None
@@ -121,6 +125,7 @@ def on_message(client, topic, message):
         received_message['search_string'] = str(data[received_message["search_string"]])
         updated_message = json.dumps(received_message)
         updateFiles.update_data_file(updated_message, search_string)
+        time.sleep(1)
         supervisor.reload()
     if "time" in topic:
         received_time = message
@@ -236,9 +241,11 @@ while True:
                 local_mqtt.loop(timeout=1)
             except OSError as e:
                 print("MQTT error:", e)
+                local_mqtt.disconnect()
                 pass
                 # optional reconnect logic here
                 # We're using the on_disconnect method
+
         frame_counter = 0
 
     time.sleep(FRAME_DELAY)

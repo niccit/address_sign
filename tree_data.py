@@ -6,7 +6,7 @@ data = {
     ,'animation_wait' : 30
     ,'stop_time': '22:00'
     ,'sleep_time': 86400
-    ,'ignore_sunset': False
+    ,'ignore_sunset': 'False'
     ,'seconds_before_sunset': 900
     ,'custom_breathe_color': 'palette_rainbow'
     ,'custom_sparkle_color': 'orange'
