@@ -1,6 +1,6 @@
 data = {
     'animations': ['multi_chase']
-    ,'num_pixels' : 196
+    ,'num_pixels' : 220
     ,'brightness_high' : 0.5
     ,'brightness_low' : 0.025
     ,'animation_wait' : 30
