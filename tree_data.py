@@ -1,6 +1,9 @@
 data = {
-    'animations': ['multi_chase']
+    'tree_animations': ['multi_chase']
+    ,'star_animations': ['rainbow_sparkle']
     ,'num_pixels' : 220
+    ,'tree_pixel_subset': [0, 195]
+    ,'star_pixel_subset': [196, 24]
     ,'brightness_high' : 0.5
     ,'brightness_low' : 0.025
     ,'animation_wait' : 30

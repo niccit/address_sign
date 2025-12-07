@@ -13,6 +13,7 @@ import adafruit_minimqtt.adafruit_minimqtt
 from adafruit_led_animation.group import AnimationGroup
 from adafruit_minimqtt.adafruit_minimqtt import MMQTTException
 from adafruit_led_animation.sequence import AnimationSequence
+from adafruit_led_animation.helper import PixelSubset
 from circuitpy_helpers.led_animations import animationBuilder
 from circuitpy_helpers.led_animations import controlLights
 from circuitpy_helpers.led_animations import updateAnimationData
@@ -36,6 +37,8 @@ except ImportError as ie:
 high_limit = data["brightness_high"]
 low_limit = data["brightness_low"]
 pixel_count = data["num_pixels"]
+tree_pixel_subset = data["tree_pixel_subset"]
+star_pixel_subset = data["star_pixel_subset"]
 before_sunset = data["seconds_before_sunset"]
 sleep_time = data["sleep_time"]
 # Assign stop time in seconds if not set to 0
@@ -56,7 +59,17 @@ sunset_in_seconds = None
 logger.info(f"test: stop_time: {stop_time} and is of type {type(stop_time)}")
 # --- Set up NeoPixels --- #
 num_pixels = pixel_count
-pixels = neopixel.NeoPixel(board.D15, num_pixels)
+pixels = neopixel.NeoPixel(board.D15, num_pixels, auto_write=False)
+
+# tree pole LEDs
+tree_start = tree_pixel_subset[0]
+tree_led_count = tree_pixel_subset[1]
+star_start = star_pixel_subset[0]
+star_led_count = star_pixel_subset[1]
+tree_pixels = PixelSubset(pixels, tree_start, tree_start + tree_led_count)
+star_pixels = PixelSubset(pixels, star_start, star_start + star_led_count)
+star_pixels.brightness = high_limit
+
 
 # --- MQTT Configuration --- #
 radio = wifi.radio
@@ -79,7 +92,7 @@ def on_connect(mqtt_client, userdata, flags, rc):
     logger.info(f"Connected to MQTT Broker {mqtt_client.broker}!")
     logger.debug(f"Flags: {flags}\n RC: {rc}")
     for topic in subscribe_list:
-        mqtt_client.subscribe(topic)
+        mqtt_client.subscribe(topic, qos=1)
 
 def on_disconnect(mqtt_client, userdata, rc):
     # This method is called when the mqtt_client disconnects
@@ -119,6 +132,7 @@ def on_message(client, topic, message):
     # Support changes to the light configurations in the data.py file
     if "tree" in topic:
         received_message = json.loads(message)
+        logger.info(f"received {received_message}")
         # since the name of the name/value pair is known, use this in the MQTT message
         # it will be transformed to the actual value in the data file before calling updater.update_data_file
         search_string = received_message["search_string"]
@@ -185,27 +199,36 @@ else:
 # --- Build Animations --- #
 # Animations defined in animation.json
 # Custom colors defined in data.py
-chosen_animations = data["animations"]
+tree_chosen_animations = data["tree_animations"]
+star_chosen_animations = data["star_animations"]
 animation_group = []
 color = None
 override_array = ["sparkles", "speed", "rate", "count", "period", "tail_length", "step", "reverse", "spacing", "size",
                   "bounce"]
 # Read in all animations from json file
 # And build the animation objects and append them to the array
+# Support animations for the tree and the star
 with open('circuitpy_helpers/led_animations/animations.json', 'r') as infile:
     adata = json.load(infile)
     for item in adata['animations']:
-        if item['name'] in chosen_animations:
+        if item['name'] in tree_chosen_animations or item['name'] in star_chosen_animations:
             # Check for any animation overrides and update the JSON object
             item_with_overrides = updateAnimationData.override_default_settings(data, override_array, item)
             # Set the color choice
             logger.info(f"item with overrides: {item_with_overrides}")
             updated_item = updateAnimationData.set_color(data, item_with_overrides)
             logger.info(f"item to send is {updated_item}")
-            obj = animationBuilder.build_animation(pixels, updated_item)
+
+            if item['name'] in tree_chosen_animations:
+                logger.info(f"{item['name']} is our tree animation")
+                obj = animationBuilder.build_animation(tree_pixels, updated_item)
+            elif item['name'] in star_chosen_animations:
+                logger.info(f"{item['name']} is our star animation")
+                obj = animationBuilder.build_animation(star_pixels, updated_item)
+
             animation_group.append(obj)
 
-if len(animation_group) > 1:
+if len(animation_group) > 2:
     animations = AnimationSequence(
         AnimationGroup(
             *(x for x in animation_group))
@@ -220,7 +243,7 @@ else:
 
 # --- Settings for Non-Blocking(ish) Hack provided by Mikey Sklar from Adafruit Forums! --- #
 FRAME_DELAY = 0.01    # 100 FPS (20 ms per frame)
-MQTT_POLL_EVERY = 100 # poll MQTT every 100 frames (~2 seconds at 50 FPS)
+MQTT_POLL_EVERY = 500 # poll MQTT about every 30 seconds (every 100 frames is about ~2 seconds at 50 FPS)
 frame_counter = 0
 
 # --- Main --- #
