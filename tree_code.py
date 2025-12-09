@@ -92,7 +92,11 @@ def on_connect(mqtt_client, userdata, flags, rc):
     logger.info(f"Connected to MQTT Broker {mqtt_client.broker}!")
     logger.debug(f"Flags: {flags}\n RC: {rc}")
     for topic in subscribe_list:
-        mqtt_client.subscribe(topic, qos=1)
+        if "tree" in topic:
+            mqtt_client.subscribe(topic, qos=1)
+        else:
+            mqtt_client.subscribe(topic, qos=0)
+
 
 def on_disconnect(mqtt_client, userdata, rc):
     # This method is called when the mqtt_client disconnects
