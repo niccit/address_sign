@@ -161,7 +161,7 @@ def on_message(client, topic, message):
             if need_sleep:
                 controlLights.blank_all(pixels)
                 controlLights.sleep_before_set_time(time_in_seconds, sunset_in_seconds, before_sunset)
-                running = True
+            running = True
         else:
             need_shutdown = controlLights.check_need_shutdown(time_in_seconds, stop_time, sunset_in_seconds, sleep_time, before_sunset)
             if need_shutdown:
