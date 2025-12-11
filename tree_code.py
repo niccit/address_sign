@@ -56,10 +56,9 @@ running = False
 time_in_seconds = None
 sunset_in_seconds = None
 
-logger.info(f"test: stop_time: {stop_time} and is of type {type(stop_time)}")
 # --- Set up NeoPixels --- #
 num_pixels = pixel_count
-pixels = neopixel.NeoPixel(board.D15, num_pixels, auto_write=False)
+pixels = neopixel.NeoPixel(board.D15, num_pixels, auto_write=False, pixel_order=neopixel.GRB)
 
 # tree pole LEDs
 tree_start = tree_pixel_subset[0]
@@ -92,10 +91,7 @@ def on_connect(mqtt_client, userdata, flags, rc):
     logger.info(f"Connected to MQTT Broker {mqtt_client.broker}!")
     logger.debug(f"Flags: {flags}\n RC: {rc}")
     for topic in subscribe_list:
-        if "tree" in topic:
-            mqtt_client.subscribe(topic, qos=1)
-        else:
-            mqtt_client.subscribe(topic, qos=0)
+       mqtt_client.subscribe(topic, qos=0)
 
 
 def on_disconnect(mqtt_client, userdata, rc):
@@ -136,15 +132,21 @@ def on_message(client, topic, message):
     # Support changes to the light configurations in the data.py file
     if "tree" in topic:
         received_message = json.loads(message)
-        logger.info(f"received {received_message}")
         # since the name of the name/value pair is known, use this in the MQTT message
         # it will be transformed to the actual value in the data file before calling updater.update_data_file
         search_string = received_message["search_string"]
-        received_message['search_string'] = str(data[received_message["search_string"]])
-        updated_message = json.dumps(received_message)
-        updateFiles.update_data_file(updated_message, search_string)
-        time.sleep(1)
-        supervisor.reload()
+        mod_current_string = str(data[search_string]).strip("' [ ]")
+        mod_new_string = str(received_message["new_value"]).strip("' [ ]")
+        if mod_new_string not in mod_current_string:
+            logger.info(f"{mod_new_string} does not match {mod_current_string}")
+            received_message['search_string'] = str(data[search_string])
+            updated_message = json.dumps(received_message)
+            updateFiles.update_data_file(updated_message, search_string)
+            time.sleep(1)
+            supervisor.reload()
+        else:
+            logger.info(f"nothing has changed {mod_current_string} matches {mod_new_string}")
+
     if "time" in topic:
         received_time = message
         time_in_seconds = timeHelper.get_time_in_seconds(received_time)
@@ -196,9 +198,6 @@ if network_status:
     except adafruit_minimqtt.adafruit_minimqtt.MMQTTException:
         logger.error("Failed to connect to MQTT broker!")
         pass
-else:
-    logger.error("Network not connected, did not try to connect to MQTT")
-
 
 # --- Build Animations --- #
 # Animations defined in animation.json
@@ -219,9 +218,7 @@ with open('circuitpy_helpers/led_animations/animations.json', 'r') as infile:
             # Check for any animation overrides and update the JSON object
             item_with_overrides = updateAnimationData.override_default_settings(data, override_array, item)
             # Set the color choice
-            logger.info(f"item with overrides: {item_with_overrides}")
             updated_item = updateAnimationData.set_color(data, item_with_overrides)
-            logger.info(f"item to send is {updated_item}")
 
             if item['name'] in tree_chosen_animations:
                 logger.info(f"{item['name']} is our tree animation")
@@ -263,15 +260,16 @@ while True:
         wan_state = wanChecker.cpy_wan_active()
 
         # if MQTT_POLL_EVERY criterion is met, loop mqtt for 1 second
+        logger.info(f"WAN state is {wan_state}")
         if wan_state:
             try:
                 local_mqtt.loop(timeout=1)
             except OSError as e:
-                print("MQTT error:", e)
-                local_mqtt.disconnect()
-                pass
-                # optional reconnect logic here
-                # We're using the on_disconnect method
+                print(f"MQTT error: {e}, reloading")
+                supervisor.reload()
+        else:
+            logger.error(f"network not connected {wan_state}, reloading")
+            supervisor.reload()
 
         frame_counter = 0
 
