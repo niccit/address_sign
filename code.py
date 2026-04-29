@@ -13,17 +13,23 @@ import adafruit_minimqtt.adafruit_minimqtt
 from adafruit_led_animation.group import AnimationGroup
 from adafruit_minimqtt.adafruit_minimqtt import MMQTTException
 from adafruit_led_animation.sequence import AnimationSequence
-from adafruit_led_animation.helper import PixelSubset
 from circuitpy_helpers.led_animations import animationBuilder
-from circuitpy_helpers.led_animations import controlLights
 from circuitpy_helpers.led_animations import updateAnimationData
 from circuitpy_helpers.file_helpers import updateFiles
 from circuitpy_helpers.calendar_time_helpers import timeHelper
+from circuitpy_helpers.calendar_time_helpers import alarmsHelper
 from circuitpy_helpers.network_helpers import wanChecker
 
 # --- Set up logging --- #
-logger = adafruit_logging.getLogger("tree_lights")
-logger.setLevel(adafruit_logging.INFO)
+logger = adafruit_logging.getLogger("address_sign")
+
+testing = True
+
+if testing:
+    logger.setLevel(adafruit_logging.DEBUG)
+else:
+    logger.setLevel(adafruit_logging.INFO)
+
 
 # --- Get configuration data --- #
 try:
@@ -37,9 +43,8 @@ except ImportError as ie:
 high_limit = data["brightness_high"]
 low_limit = data["brightness_low"]
 pixel_count = data["num_pixels"]
-tree_pixel_subset = data["tree_pixel_subset"]
-star_pixel_subset = data["star_pixel_subset"]
 before_sunset = data["seconds_before_sunset"]
+before_sunrise = data["seconds_before_sunrise"]
 sleep_time = data["sleep_time"]
 # Assign stop time in seconds if not set to 0
 # If set to 0 never sleep, run constantly
@@ -52,23 +57,25 @@ if ignore_sunset_string is "False":
     ignore_sunset = False
 else:
     ignore_sunset = True
+ignore_shutdown_string = data["ignore_shutdown"]
+if ignore_shutdown_string is "False":
+    ignore_shutdown = False
+else:
+    ignore_shutdown = True
 running = False
 time_in_seconds = None
 sunset_in_seconds = None
+sunrise_in_seconds = None
+
+# ---- Helper classes ---- #
+# Set all the pixels to black
+def blank_all():
+    pixels.fill((0, 0, 0))
+    pixels.show()
 
 # --- Set up NeoPixels --- #
 num_pixels = pixel_count
-pixels = neopixel.NeoPixel(board.D15, num_pixels, auto_write=False, pixel_order=neopixel.GRB)
-
-# tree pole LEDs
-tree_start = tree_pixel_subset[0]
-tree_led_count = tree_pixel_subset[1]
-star_start = star_pixel_subset[0]
-star_led_count = star_pixel_subset[1]
-tree_pixels = PixelSubset(pixels, tree_start, tree_start + tree_led_count)
-star_pixels = PixelSubset(pixels, star_start, star_start + star_led_count)
-star_pixels.brightness = high_limit
-
+pixels = neopixel.NeoPixel(board.D13, num_pixels, auto_write=False, pixel_order=neopixel.RGB)
 
 # --- MQTT Configuration --- #
 radio = wifi.radio
@@ -77,12 +84,14 @@ ssl_context = adafruit_connection_manager.get_radio_ssl_context(radio)
 
 # MQTT feeds
 subscribe_list = []
-tree_lights = os.getenv("mqtt_tree_lights_feed")
-subscribe_list.append(tree_lights)
-date_time = os.getenv("mqtt_datetime_feed")
-subscribe_list.append(date_time)
-sunset = os.getenv("mqtt_sunset_feed")
+m_time = os.getenv("mqtt_time")
+subscribe_list.append(m_time)
+sunset = os.getenv("sunset")
 subscribe_list.append(sunset)
+sunrise = os.getenv("sunrise")
+subscribe_list.append(sunrise)
+address_lights = os.getenv("address_lights")
+subscribe_list.append(address_lights)
 
 # MQTT specific helpers
 def on_connect(mqtt_client, userdata, flags, rc):
@@ -91,7 +100,7 @@ def on_connect(mqtt_client, userdata, flags, rc):
     logger.info(f"Connected to MQTT Broker {mqtt_client.broker}!")
     logger.debug(f"Flags: {flags}\n RC: {rc}")
     for topic in subscribe_list:
-       mqtt_client.subscribe(topic, qos=0)
+        mqtt_client.subscribe(topic)
 
 
 def on_disconnect(mqtt_client, userdata, rc):
@@ -127,10 +136,10 @@ def on_publish(mqtt_client, userdata, topic, pid):
     logger.info(f"Published to {topic} with PID {pid}")
 
 def on_message(client, topic, message):
-    global time_in_seconds, sunset_in_seconds
+    global time_in_seconds, sunset_in_seconds, sunrise_in_seconds
     logger.info(f"New message for {client} on topic {topic}: {message}")
     # Support changes to the light configurations in the data.py file
-    if "tree" in topic:
+    if "lights" in topic:
         received_message = json.loads(message)
         # since the name of the name/value pair is known, use this in the MQTT message
         # it will be transformed to the actual value in the data file before calling updater.update_data_file
@@ -138,35 +147,50 @@ def on_message(client, topic, message):
         mod_current_string = str(data[search_string]).strip("' [ ]")
         mod_new_string = str(received_message["new_value"]).strip("' [ ]")
         if mod_new_string not in mod_current_string:
-            logger.info(f"{mod_new_string} does not match {mod_current_string}")
+            logger.debug(f"{mod_new_string} does not match {mod_current_string}")
             received_message['search_string'] = str(data[search_string])
             updated_message = json.dumps(received_message)
             updateFiles.update_data_file(updated_message, search_string)
             time.sleep(1)
             supervisor.reload()
         else:
-            logger.info(f"nothing has changed {mod_current_string} matches {mod_new_string}")
+            logger.debug(f"nothing has changed {mod_current_string} matches {mod_new_string}")
 
     if "time" in topic:
         received_time = message
+        logger.debug(f"New message for {client} on topic {topic}: {received_time}")
         time_in_seconds = timeHelper.get_time_in_seconds(received_time)
     if "sunset" in topic:
         sunset_time = message
+        logger.debug(f"New message for {client} on topic {topic}: {sunset_time}")
         sunset_in_seconds = timeHelper.get_time_in_seconds(sunset_time)
+    if "sunrise" in topic:
+        sunrise_time = message
+        logger.debug(f"New message for {client} on topic {topic}: {sunrise_time}")
+        sunrise_in_seconds = timeHelper.get_time_in_seconds(sunrise_time)
 
-    if time_in_seconds and sunset_in_seconds:
+    if time_in_seconds and sunset_in_seconds and sunrise_in_seconds:
         global running
         if not running:
-            need_sleep = controlLights.check_need_sleep(time_in_seconds, sunset_in_seconds, before_sunset, ignore_sunset)
+            need_sleep = alarmsHelper.check_need_sleep(time_in_seconds, sunset_in_seconds, before_sunset, ignore_sunset)
+            logger.debug(f"need sleep is {need_sleep}")
             if need_sleep:
-                controlLights.blank_all(pixels)
-                controlLights.sleep_before_set_time(time_in_seconds, sunset_in_seconds, before_sunset)
-            running = True
+                logger.debug("blanking pixels")
+                blank_all()
+                logger.debug("sleeping before sunset")
+                alarmsHelper.sleep_before_set_time(time_in_seconds, sunset_in_seconds, before_sunset, 1)
+                running = True
+            else:
+                logger.debug(f"set to ignore sleep before sunset: {ignore_sunset}")
         else:
-            need_shutdown = controlLights.check_need_shutdown(time_in_seconds, stop_time, sunset_in_seconds, sleep_time, before_sunset)
+            need_shutdown = alarmsHelper.check_need_shutdown(time_in_seconds, sunrise_in_seconds, before_sunrise, ignore_shutdown)
             if need_shutdown:
-                controlLights.blank_all(pixels)
-                controlLights.shutdown(time_in_seconds, sunset_in_seconds, sleep_time, before_sunset)
+                logger.debug("blanking pixels")
+                blank_all()
+                logger.debug("sleeping before sunset")
+                alarmsHelper.shutdown(time_in_seconds, sunrise_in_seconds, before_sunrise, 1)
+            else:
+                logger.debug(f"set to ignore shutdown: {ignore_shutdown}")
 
 mqtt_local_broker = os.getenv("mqtt_local_server")
 mqtt_local_port = os.getenv("mqtt_local_port")
@@ -174,7 +198,7 @@ mqtt_local_username = os.getenv("mqtt_local_username")
 mqtt_local_key = os.getenv("mqtt_local_key")
 local_mqtt = adafruit_minimqtt.adafruit_minimqtt.MQTT(
     broker=mqtt_local_broker
-    ,port = mqtt_local_port
+    ,port = int(mqtt_local_port)
     ,username=mqtt_local_username
     ,password=mqtt_local_key
     ,socket_pool=pool
@@ -192,6 +216,7 @@ local_mqtt.on_message = on_message
 
 # Connect
 network_status = wanChecker.cpy_wan_active()
+logger.info(f"network status is {network_status}")
 if network_status:
     try:
         local_mqtt.connect()
@@ -202,8 +227,7 @@ if network_status:
 # --- Build Animations --- #
 # Animations defined in animation.json
 # Custom colors defined in data.py
-tree_chosen_animations = data["tree_animations"]
-star_chosen_animations = data["star_animations"]
+current_animations = data["animations"]
 animation_group = []
 color = None
 override_array = ["sparkles", "speed", "rate", "count", "period", "tail_length", "step", "reverse", "spacing", "size",
@@ -214,18 +238,15 @@ override_array = ["sparkles", "speed", "rate", "count", "period", "tail_length",
 with open('circuitpy_helpers/led_animations/animations.json', 'r') as infile:
     adata = json.load(infile)
     for item in adata['animations']:
-        if item['name'] in tree_chosen_animations or item['name'] in star_chosen_animations:
+        if item['name'] in current_animations:
             # Check for any animation overrides and update the JSON object
             item_with_overrides = updateAnimationData.override_default_settings(data, override_array, item)
             # Set the color choice
             updated_item = updateAnimationData.set_color(data, item_with_overrides)
 
-            if item['name'] in tree_chosen_animations:
-                logger.info(f"{item['name']} is our tree animation")
-                obj = animationBuilder.build_animation(tree_pixels, updated_item)
-            elif item['name'] in star_chosen_animations:
-                logger.info(f"{item['name']} is our star animation")
-                obj = animationBuilder.build_animation(star_pixels, updated_item)
+            if item['name'] in current_animations:
+                logger.debug(f"{item['name']} is our animation")
+                obj = animationBuilder.build_animation(pixels, updated_item)
 
             animation_group.append(obj)
 
@@ -244,11 +265,11 @@ else:
 
 # --- Settings for Non-Blocking(ish) Hack provided by Mikey Sklar from Adafruit Forums! --- #
 FRAME_DELAY = 0.01    # 100 FPS (20 ms per frame)
-MQTT_POLL_EVERY = 500 # poll MQTT about every 30 seconds (every 100 frames is about ~2 seconds at 50 FPS)
+MQTT_POLL_EVERY = 1500 # poll MQTT about every 30 seconds (every 100 frames is about ~2 seconds at 50 FPS)
 frame_counter = 0
 
 # --- Main --- #
-logger.info("Christmas Tree Lights starting up")
+logger.info("Address sign starting up")
 while True:
     # Start animations
     animations.animate()
@@ -258,9 +279,9 @@ while True:
     if frame_counter >= MQTT_POLL_EVERY:
         # Check WAN connectivity
         wan_state = wanChecker.cpy_wan_active()
+        logger.debug(f"WAN state is {wan_state} {wifi.radio.ap_info.ssid} {wifi.radio.ipv4_address}")
 
         # if MQTT_POLL_EVERY criterion is met, loop mqtt for 1 second
-        logger.info(f"WAN state is {wan_state}")
         if wan_state:
             try:
                 local_mqtt.loop(timeout=1)
