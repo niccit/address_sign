@@ -4,7 +4,7 @@ $fs = 0.4;
 
 include <YAPP_Box/YAPPgenerator_v3.scad>
 
-// Feather ESP32v2 case for Aluminum Tree Lights
+// Feather ESP32v2 case with room to store a LiPoly battery
 
 printBaseShell = true;
 printLidShell = true;
@@ -14,9 +14,9 @@ pcbLength = 52.3;
 pcbWidth = 22.8;
 pcbThickness = 7.2;
 
-paddingLeft = 4;
-paddingRight = 4;
-paddingFront = 2;
+paddingLeft = 9.5;
+paddingRight = 9.5;
+paddingFront = 9;
 paddingBack = 2;
 
 wallThickness = 1.5;
@@ -24,31 +24,37 @@ basePlaneThickness = 1.5;
 lidPlaneThickness = 1.5;
 
 baseWallHeight = 15;
-lidWallHeight = 10;
+lidWallHeight = 17;
 
 ridgeHeight = 5;
 ridgeSlack = 0.2;
 roundRadius = 2.0;
 
-standoffHeight = 5.0;
+standoffHeight = 7.0;
 standoffPinDiameter = 2;
 standoffHoleSlack = 0.5;
 standoffDiameter = 4;
 
 pcbStands = [
-   [2, 2, yappHole, yappBaseOnly, yappSelfThreading]
-   ,[2, (pcbWidth - paddingRight) + 2, yappHole, yappBaseOnly, yappSelfThreading]
-   ,[(pcbLength - (paddingFront + 2)), 2, yappHole, yappBaseOnly, yappSelfThreading]
-   ,[(pcbLength - (paddingFront + 2)), (pcbWidth - paddingRight) + 2, yappHole, yappBaseOnly, yappSelfThreading]
+   [2, 3, yappHole, yappBaseOnly, yappSelfThreading]
+   ,[2, (pcbWidth - paddingRight) + 7.5, yappHole, yappBaseOnly, yappSelfThreading]
+   ,[(pcbLength - (paddingFront - 4.5)), 3, yappHole, yappBaseOnly, yappSelfThreading]
+   ,[(pcbLength - (paddingFront - 4.5)), (pcbWidth - paddingRight) + 7.5, yappHole, yappBaseOnly, yappSelfThreading]
    ];
 
 cutoutsBack = [
-   [ (7 - (paddingRight/2 - 1)) , -7, 11.42, 8.26, 0, yappRectangle]
+   [ (11 - (paddingRight/2)) , -12, 11.42, 8.26, 0, yappRectangle]          // charging port
+   ,[10, 5.5, 10, 10, 3.9, yappCircle, yappCenter, yappLidOnly]                // reset button
    ];
 
 cutoutsRight = [
-   [pcbLength / 2, -7, 13, 7, 0, yappRectangle]
+   [pcbLength / 2, -7, 13, 7, 0, yappRectangle]                             // inlet for connectors for lights
    ];
 
+snapJoins = [
+    [shellLength, 5, yappLeft, yappRight, yappSymmetric, yappRectangle]
+   ,[shellWidth / 2, 5, yappFront, yappCenter, yappRectangle]
+   ,[shellWidth, 5, yappBack, yappSymmetric, yappRectangle]
+    ];
 
 YAPPgenerate();

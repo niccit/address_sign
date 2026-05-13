@@ -4,9 +4,10 @@ data = {
     ,'brightness_high' : 0.5
     ,'brightness_low' : 0.025
     ,'animation_wait' : 30
+    ,'testing': True
     ,'stop_time': '22:00'
     ,'sleep_time': 86400
-    ,'ignore_sunset': 'False'
+    ,'ignore_sunset': 'True'
     ,'ignore_shutdown': 'False'
     ,'seconds_before_sunset': 900
     ,'seconds_before_sunrise': 900

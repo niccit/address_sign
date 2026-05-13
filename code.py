@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: MIT
 
 import json
+
+import analogio
 import board
 import time
 import os
@@ -11,25 +13,19 @@ import supervisor
 import adafruit_connection_manager
 import adafruit_minimqtt.adafruit_minimqtt
 from adafruit_led_animation.group import AnimationGroup
-from adafruit_minimqtt.adafruit_minimqtt import MMQTTException
+from adafruit_minimqtt.adafruit_minimqtt import MMQTTException, MMQTTStateError
 from adafruit_led_animation.sequence import AnimationSequence
-from circuitpy_helpers.led_animations import animationBuilder
-from circuitpy_helpers.led_animations import updateAnimationData
-from circuitpy_helpers.file_helpers import updateFiles
-from circuitpy_helpers.calendar_time_helpers import timeHelper
-from circuitpy_helpers.calendar_time_helpers import alarmsHelper
-from circuitpy_helpers.network_helpers import wanChecker
+# from adafruit_max1704x import MAX17048
+from circuitpy_libs import animationBuilder
+from circuitpy_libs import updateAnimationData
+from circuitpy_libs import updateFiles
+from circuitpy_libs import timeHelper
+from circuitpy_libs import alarmsHelper
+from circuitpy_libs import wanChecker
+from circuitpy_libs import batteryMonitorHelper
 
 # --- Set up logging --- #
 logger = adafruit_logging.getLogger("address_sign")
-
-testing = True
-
-if testing:
-    logger.setLevel(adafruit_logging.DEBUG)
-else:
-    logger.setLevel(adafruit_logging.INFO)
-
 
 # --- Get configuration data --- #
 try:
@@ -40,6 +36,7 @@ except ImportError as ie:
     raise
 
 # Variable assignments
+testing = data["testing"]
 high_limit = data["brightness_high"]
 low_limit = data["brightness_low"]
 pixel_count = data["num_pixels"]
@@ -67,11 +64,27 @@ time_in_seconds = None
 sunset_in_seconds = None
 sunrise_in_seconds = None
 
+
+if testing:
+    logger.setLevel(adafruit_logging.DEBUG)
+    logger.info("testing")
+else:
+    logger.setLevel(adafruit_logging.INFO)
+    logger.info("live")
+
+
+# ---- Battery ---- #
+batMon = analogio.AnalogIn(board.VOLTAGE_MONITOR)
+batteryCheckWait = 60
+batteryCheck = None
+batteryWarn = False
+
 # ---- Helper classes ---- #
 # Set all the pixels to black
 def blank_all():
     pixels.fill((0, 0, 0))
     pixels.show()
+
 
 # --- Set up NeoPixels --- #
 num_pixels = pixel_count
@@ -92,6 +105,7 @@ sunrise = os.getenv("sunrise")
 subscribe_list.append(sunrise)
 address_lights = os.getenv("address_lights")
 subscribe_list.append(address_lights)
+battery_monitor = os.getenv("battery_monitor")
 
 # MQTT specific helpers
 def on_connect(mqtt_client, userdata, flags, rc):
@@ -135,26 +149,54 @@ def on_publish(mqtt_client, userdata, topic, pid):
     # This method is called when the mqtt_client publishes data to a feed.
     logger.info(f"Published to {topic} with PID {pid}")
 
+
+reload = False
+update = False
+floats = ["speed", "length", "size", "spacing"]
+notString = False
 def on_message(client, topic, message):
-    global time_in_seconds, sunset_in_seconds, sunrise_in_seconds
+    global time_in_seconds, sunset_in_seconds, sunrise_in_seconds, reload, update, notString
     logger.info(f"New message for {client} on topic {topic}: {message}")
     # Support changes to the light configurations in the data.py file
     if "lights" in topic:
         received_message = json.loads(message)
+        logger.debug(f"received message {received_message}")
         # since the name of the name/value pair is known, use this in the MQTT message
         # it will be transformed to the actual value in the data file before calling updater.update_data_file
         search_string = received_message["search_string"]
         mod_current_string = str(data[search_string]).strip("' [ ]")
         mod_new_string = str(received_message["new_value"]).strip("' [ ]")
-        if mod_new_string not in mod_current_string:
-            logger.debug(f"{mod_new_string} does not match {mod_current_string}")
+
+        for _ in floats:
+            if _ in search_string:
+                notString = True
+                logger.debug(f"dealing with floats not strings, {notString}")
+
+        if notString:
+            if data[search_string] != received_message["new_value"]:
+                update = True
+                logger.debug(f"compared floats and something changed")
+            notString = False
+        else:
+            logger.debug(f"new string is {type(mod_new_string)}:{mod_new_string} and current string is {type(mod_current_string)}:{mod_current_string}")
+            if mod_new_string not in mod_current_string:
+                update = True
+                logger.debug(f"compared strings and something changed")
+
+
+        if "animations" is search_string and update:
+            reload = True
+            logger.debug(f"we have an animation or a config change,  {reload}")
+
+        if update:
             received_message['search_string'] = str(data[search_string])
             updated_message = json.dumps(received_message)
+            logger.debug(f"update message is {updated_message}, and search string is {str(search_string)}")
             updateFiles.update_data_file(updated_message, search_string)
-            time.sleep(1)
+
+        if reload:
+            logger.debug("reloading")
             supervisor.reload()
-        else:
-            logger.debug(f"nothing has changed {mod_current_string} matches {mod_new_string}")
 
     if "time" in topic:
         received_time = message
@@ -187,7 +229,7 @@ def on_message(client, topic, message):
             if need_shutdown:
                 logger.debug("blanking pixels")
                 blank_all()
-                logger.debug("sleeping before sunset")
+                logger.debug("it's sunrise, sleeping before sunset")
                 alarmsHelper.shutdown(time_in_seconds, sunrise_in_seconds, before_sunrise, 1)
             else:
                 logger.debug(f"set to ignore shutdown: {ignore_shutdown}")
@@ -220,9 +262,17 @@ logger.info(f"network status is {network_status}")
 if network_status:
     try:
         local_mqtt.connect()
-    except adafruit_minimqtt.adafruit_minimqtt.MMQTTException:
+    except adafruit_minimqtt.adafruit_minimqtt.MMQTTStateError:
         logger.error("Failed to connect to MQTT broker!")
-        pass
+        supervisor.reload()
+else:
+    try:
+        wifi.radio.connect(os.getenv("CIRCUITPY_WIFI_SSID"), os.getenv("CIRCUITPY_WIFI_PASSWORD"))
+    except ConnectionError:
+        logger.error("Failed to connect to WiFi")
+        supervisor.reload()
+
+
 
 # --- Build Animations --- #
 # Animations defined in animation.json
@@ -235,7 +285,7 @@ override_array = ["sparkles", "speed", "rate", "count", "period", "tail_length",
 # Read in all animations from json file
 # And build the animation objects and append them to the array
 # Support animations for the tree and the star
-with open('circuitpy_helpers/led_animations/animations.json', 'r') as infile:
+with open('./lib/circuitpy_libs/animations.json', 'r') as infile:
     adata = json.load(infile)
     for item in adata['animations']:
         if item['name'] in current_animations:
@@ -271,7 +321,6 @@ frame_counter = 0
 # --- Main --- #
 logger.info("Address sign starting up")
 while True:
-    # Start animations
     animations.animate()
 
     frame_counter += 1
@@ -283,14 +332,31 @@ while True:
 
         # if MQTT_POLL_EVERY criterion is met, loop mqtt for 1 second
         if wan_state:
+            logger.debug(f"WAN state is {wan_state}")
             try:
                 local_mqtt.loop(timeout=1)
-            except OSError as e:
+            except MMQTTStateError as e:
                 print(f"MQTT error: {e}, reloading")
                 supervisor.reload()
         else:
             logger.error(f"network not connected {wan_state}, reloading")
             supervisor.reload()
+
+        # Check the voltage of the battery, send a message to MQTT if it's below 3.7V
+        if batteryCheck is None or time.monotonic() > batteryCheck + batteryCheckWait:
+            batteryVoltage, batteryPercentage = batteryMonitorHelper.monitor_battery(batMon, "v1")
+            batteryVoltage = batteryMonitorHelper.format_battery_voltage(batteryVoltage)
+            batteryWarnHigh, batteryWarnLow = batteryMonitorHelper.get_discharging_level()
+            batteryAlarm = batteryMonitorHelper.get_warning_level()
+            bat_message = {
+                "voltage": batteryVoltage,
+                "warn": batteryWarnHigh,
+                "alarm": batteryAlarm
+            }
+            bat_message = json.dumps(bat_message)
+            logger.debug(f"sending message {bat_message}")
+            local_mqtt.publish(battery_monitor, bat_message)
+            batteryCheck = time.monotonic()
 
         frame_counter = 0
 
