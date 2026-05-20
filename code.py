@@ -89,7 +89,7 @@ def blank_all():
 # --- Set up NeoPixels --- #
 num_pixels = pixel_count
 pixels = neopixel.NeoPixel(board.D13, num_pixels, brightness=high_limit, auto_write=False, pixel_order=neopixel.RGB)
-addy_lights = PixelMap(pixels, [(2, 5), (6, 10), (13, 16), (17, 22), (22, 26) ], individual_pixels=False)
+addy_lights = PixelMap(pixels, [(2, 5), (6, 10), (12, 16), (17, 22), (22, 26) ], individual_pixels=False)
 
 # --- MQTT Configuration --- #
 radio = wifi.radio
