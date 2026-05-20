@@ -1,6 +1,11 @@
 data = {
     'animations': ['rainbow_sparkle']
     ,'num_pixels' : 50
+    ,'address_7' : [0, 3]
+    ,'address_5' : [6, 4]
+    ,'address_2' : [15, 3]
+    ,'address_8' : [19, 5]
+    ,'address_0' : [24, 4]
     ,'brightness_high' : 0.5
     ,'brightness_low' : 0.025
     ,'animation_wait' : 30

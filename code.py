@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: MIT
 
 import json
-
 import analogio
 import board
 import time
@@ -13,9 +12,9 @@ import supervisor
 import adafruit_connection_manager
 import adafruit_minimqtt.adafruit_minimqtt
 from adafruit_led_animation.group import AnimationGroup
+from adafruit_led_animation.helper import PixelSubset, PixelMap
 from adafruit_minimqtt.adafruit_minimqtt import MMQTTException, MMQTTStateError
 from adafruit_led_animation.sequence import AnimationSequence
-# from adafruit_max1704x import MAX17048
 from circuitpy_libs import animationBuilder
 from circuitpy_libs import updateAnimationData
 from circuitpy_libs import updateFiles
@@ -23,6 +22,7 @@ from circuitpy_libs import timeHelper
 from circuitpy_libs import alarmsHelper
 from circuitpy_libs import wanChecker
 from circuitpy_libs import batteryMonitorHelper
+from circuitpy_libs import getColors
 
 # --- Set up logging --- #
 logger = adafruit_logging.getLogger("address_sign")
@@ -88,7 +88,8 @@ def blank_all():
 
 # --- Set up NeoPixels --- #
 num_pixels = pixel_count
-pixels = neopixel.NeoPixel(board.D13, num_pixels, auto_write=False, pixel_order=neopixel.RGB)
+pixels = neopixel.NeoPixel(board.D13, num_pixels, brightness=high_limit, auto_write=False, pixel_order=neopixel.RGB)
+addy_lights = PixelMap(pixels, [(2, 5), (6, 10), (13, 16), (17, 22), (22, 26) ], individual_pixels=False)
 
 # --- MQTT Configuration --- #
 radio = wifi.radio
@@ -296,7 +297,7 @@ with open('./lib/circuitpy_libs/animations.json', 'r') as infile:
 
             if item['name'] in current_animations:
                 logger.debug(f"{item['name']} is our animation")
-                obj = animationBuilder.build_animation(pixels, updated_item)
+                obj = animationBuilder.build_animation(addy_lights, updated_item)
 
             animation_group.append(obj)
 
@@ -321,6 +322,7 @@ frame_counter = 0
 # --- Main --- #
 logger.info("Address sign starting up")
 while True:
+
     animations.animate()
 
     frame_counter += 1
@@ -338,6 +340,9 @@ while True:
             except MMQTTStateError as e:
                 print(f"MQTT error: {e}, reloading")
                 supervisor.reload()
+            except MMQTTException as me:
+                print(f"MQTT error: {me}, reloading")
+                supervisor.reload()
         else:
             logger.error(f"network not connected {wan_state}, reloading")
             supervisor.reload()
@@ -345,12 +350,14 @@ while True:
         # Check the voltage of the battery, send a message to MQTT if it's below 3.7V
         if batteryCheck is None or time.monotonic() > batteryCheck + batteryCheckWait:
             batteryVoltage, batteryPercentage = batteryMonitorHelper.monitor_battery(batMon, "v1")
-            batteryVoltage = batteryMonitorHelper.format_battery_voltage(batteryVoltage)
+            batteryVoltage = round(batteryVoltage, 1)
+            batteryVoltage_pretty_print = batteryMonitorHelper.format_battery_voltage(batteryVoltage)
             batteryWarnHigh, batteryWarnLow = batteryMonitorHelper.get_discharging_level()
             batteryAlarm = batteryMonitorHelper.get_warning_level()
             bat_message = {
-                "voltage": batteryVoltage,
-                "warn": batteryWarnHigh,
+                "raw_voltage": batteryVoltage,
+                "pretty_voltage": batteryVoltage_pretty_print,
+                "warn": batteryWarnLow,
                 "alarm": batteryAlarm
             }
             bat_message = json.dumps(bat_message)

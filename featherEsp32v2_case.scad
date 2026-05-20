@@ -6,7 +6,7 @@ include <YAPP_Box/YAPPgenerator_v3.scad>
 
 // Feather ESP32v2 case with room to store a LiPoly battery
 
-printBaseShell = true;
+printBaseShell = false;
 printLidShell = true;
 
 // 52.3mm x 22.8mm x 7.2mm per https://www.adafruit.com/product/5400
@@ -24,7 +24,7 @@ basePlaneThickness = 1.5;
 lidPlaneThickness = 1.5;
 
 baseWallHeight = 15;
-lidWallHeight = 17;
+lidWallHeight = 19;
 
 ridgeHeight = 5;
 ridgeSlack = 0.2;
