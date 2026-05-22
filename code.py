@@ -12,7 +12,7 @@ import supervisor
 import adafruit_connection_manager
 import adafruit_minimqtt.adafruit_minimqtt
 from adafruit_led_animation.group import AnimationGroup
-from adafruit_led_animation.helper import PixelSubset, PixelMap
+from adafruit_led_animation.helper import PixelMap
 from adafruit_minimqtt.adafruit_minimqtt import MMQTTException, MMQTTStateError
 from adafruit_led_animation.sequence import AnimationSequence
 from circuitpy_libs import animationBuilder
@@ -40,25 +40,31 @@ testing = data["testing"]
 high_limit = data["brightness_high"]
 low_limit = data["brightness_low"]
 pixel_count = data["num_pixels"]
-before_sunset = data["seconds_before_sunset"]
-before_sunrise = data["seconds_before_sunrise"]
-sleep_time = data["sleep_time"]
-# Assign stop time in seconds if not set to 0
-# If set to 0 never sleep, run constantly
-if data["stop_time"] != 0:
-    stop_time = timeHelper.get_time_in_seconds(data["stop_time"])
+wake_time = data["wake_time"]
+wake_time_adjustment = data["wake_time_adjustment"]
+shutdown_time = data["shutdown_time"]
+shutdown_time_adjustment = data["shutdown_time_adjustment"]
+before_shutdown = data["before_shutdown_window"]
+after_shutdown = data["after_shutdown_window"]
+
+if wake_time is not None:
+    wake_time = timeHelper.get_time_in_seconds(wake_time)
+
+if shutdown_time is not None:
+    shutdown_time = timeHelper.get_time_in_seconds(shutdown_time)
+
+ignore_sleep_string = data["ignore_sleep"]
+if ignore_sleep_string is "False":
+    ignore_sleep = False
 else:
-    stop_time = int(data["stop_time"])
-ignore_sunset_string = data["ignore_sunset"]
-if ignore_sunset_string is "False":
-    ignore_sunset = False
-else:
-    ignore_sunset = True
+    ignore_sleep = True
+
 ignore_shutdown_string = data["ignore_shutdown"]
 if ignore_shutdown_string is "False":
     ignore_shutdown = False
 else:
     ignore_shutdown = True
+
 running = False
 time_in_seconds = None
 sunset_in_seconds = None
@@ -213,25 +219,47 @@ def on_message(client, topic, message):
         sunrise_in_seconds = timeHelper.get_time_in_seconds(sunrise_time)
 
     if time_in_seconds and sunset_in_seconds and sunrise_in_seconds:
-        global running
-        if not running:
-            need_sleep = alarmsHelper.check_need_sleep(time_in_seconds, sunset_in_seconds, before_sunset, ignore_sunset)
-            logger.debug(f"need sleep is {need_sleep}")
+
+        if not ignore_sleep:
+            if wake_time is not None:
+                need_sleep, time_diff = alarmsHelper.check_need_sleep(time_in_seconds, wake_time,
+                                                                      wake_time_adjustment)
+            else:
+                need_sleep, time_diff = alarmsHelper.check_need_sleep(time_in_seconds, sunset_in_seconds,
+                                                                      wake_time_adjustment)
+            logger.debug(f"need sleep is {need_sleep} time diff is {time_diff}")
+
             if need_sleep:
                 logger.debug("blanking pixels")
                 blank_all()
                 logger.debug("sleeping before sunset")
-                alarmsHelper.sleep_before_set_time(time_in_seconds, sunset_in_seconds, before_sunset, 1)
-                running = True
+                alarmsHelper.sleep_before_set_time(time_diff, 1)
             else:
-                logger.debug(f"set to ignore sleep before sunset: {ignore_sunset}")
-        else:
-            need_shutdown = alarmsHelper.check_need_shutdown(time_in_seconds, sunrise_in_seconds, before_sunrise, ignore_shutdown)
+                logger.debug(f"set to ignore sleep before sunset: {ignore_sleep}")
+
+        if not ignore_shutdown:
+            if shutdown_time is not None:
+                if wake_time is not None:
+                    need_shutdown, time_diff = alarmsHelper.check_need_shutdown(time_in_seconds, shutdown_time, before_shutdown,
+                                                                                after_shutdown, wake_time_adjustment, wake_time)
+                else:
+                    need_shutdown, time_diff = alarmsHelper.check_need_shutdown(time_in_seconds, shutdown_time, before_shutdown,
+                                                                                after_shutdown, wake_time_adjustment, sunset_in_seconds)
+            else:
+                if wake_time is not None:
+                    need_shutdown, time_diff = alarmsHelper.check_need_shutdown(time_in_seconds, sunrise_in_seconds, before_shutdown,
+                                                                                after_shutdown, wake_time_adjustment, wake_time )
+                else:
+                    need_shutdown, time_diff = alarmsHelper.check_need_shutdown(time_in_seconds, sunrise_in_seconds, before_shutdown,
+                                                                                after_shutdown, wake_time_adjustment, sunset_in_seconds)
+
+            logger.debug(f"need shutdown is {need_shutdown} time diff is {time_diff}")
+
             if need_shutdown:
                 logger.debug("blanking pixels")
                 blank_all()
                 logger.debug("it's sunrise, sleeping before sunset")
-                alarmsHelper.shutdown(time_in_seconds, sunrise_in_seconds, before_sunrise, 1)
+                alarmsHelper.shutdown(time_diff, 1)
             else:
                 logger.debug(f"set to ignore shutdown: {ignore_shutdown}")
 

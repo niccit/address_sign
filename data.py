@@ -1,21 +1,18 @@
 data = {
     'animations': ['rainbow_sparkle']
     ,'num_pixels' : 50
-    ,'address_7' : [0, 3]
-    ,'address_5' : [6, 4]
-    ,'address_2' : [15, 3]
-    ,'address_8' : [19, 5]
-    ,'address_0' : [24, 4]
     ,'brightness_high' : 0.5
     ,'brightness_low' : 0.025
     ,'animation_wait' : 30
     ,'testing': True
-    ,'stop_time': '22:00'
-    ,'sleep_time': 86400
-    ,'ignore_sunset': 'True'
+    ,'wake_time': None              # 24-hour time format for time, must be a string, or None
+    ,'wake_time_adjustment': 0
+    ,'ignore_sleep': 'True'
+    ,'shutdown_time': '02:00'       # 24-hour time format for time, must be a string, or None
+    ,'shutdown_time_adjustment': 900
+    ,'before_shutdown_window': 60
+    ,'after_shutdown_window': 120
     ,'ignore_shutdown': 'False'
-    ,'seconds_before_sunset': 900
-    ,'seconds_before_sunrise': 900
     ,'custom_sparkle_color': 'orange'
     ,'cycle_color': 'None'
     ,'custom_solid_color': 'None'
