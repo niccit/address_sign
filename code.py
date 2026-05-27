@@ -233,7 +233,7 @@ def on_message(client, topic, message):
                 logger.debug("blanking pixels")
                 blank_all()
                 logger.debug("sleeping before sunset")
-                alarmsHelper.sleep_before_set_time(time_diff, 1)
+                alarmsHelper.sleep_before_set_time(time_diff, 0)
             else:
                 logger.debug(f"set to ignore sleep before sunset: {ignore_sleep}")
 
@@ -259,7 +259,7 @@ def on_message(client, topic, message):
                 logger.debug("blanking pixels")
                 blank_all()
                 logger.debug("it's sunrise, sleeping before sunset")
-                alarmsHelper.shutdown(time_diff, 1)
+                alarmsHelper.shutdown(time_diff, 0)
             else:
                 logger.debug(f"set to ignore shutdown: {ignore_shutdown}")
 

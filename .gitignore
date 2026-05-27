@@ -208,3 +208,5 @@ __marimo__/
 /tree_settings.toml
 /settings.toml
 /.idea
+/solar_panel_mount_rod.stl
+/test.py
