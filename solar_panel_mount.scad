@@ -1,4 +1,3 @@
-use <solar_panel_mount.scad>
 // OpenSCAD file
 // Created: 5/22/26
 // SPDX-License-Identifier: MIT
@@ -14,7 +13,7 @@ module hook() {
     difference() {
         cube([55, 28.23, 50], center=true);
         translate([0, 3, -1])
-            cube([56, 16.23, 50], center=true);
+            color("green")cube([56, 20, 50], center=true);
         translate([0, 13, -1])
             cube([56, 4, 50], center=true);
     }
@@ -65,9 +64,9 @@ module top() {
     }
 }
 
-all = true;
+all = false;
 cap = false;
-hook = false;
+hook = true;
 rod = false;
 
 if (all == true) {

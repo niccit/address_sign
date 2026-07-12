@@ -95,7 +95,9 @@ def blank_all():
 # --- Set up NeoPixels --- #
 num_pixels = pixel_count
 pixels = neopixel.NeoPixel(board.D13, num_pixels, brightness=high_limit, auto_write=False, pixel_order=neopixel.RGB)
-addy_lights = PixelMap(pixels, [(2, 5), (6, 10), (12, 16), (17, 22), (22, 28) ], individual_pixels=False)
+# addy_lights = PixelMap(pixels, [(2, 5), (6, 10), (12, 16), (17, 22), (22, 28) ], individual_pixels=False)
+addy_lights = pixels
+on_board_pixel = neopixel.NeoPixel(board.NEOPIXEL, 1)
 
 # --- MQTT Configuration --- #
 radio = wifi.radio
@@ -233,6 +235,8 @@ def on_message(client, topic, message):
                 logger.debug("blanking pixels")
                 blank_all()
                 logger.debug("sleeping before sunset")
+                on_board_pixel.fill((0, 0, 0))
+                on_board_pixel.show()
                 alarmsHelper.sleep_before_set_time(time_diff, 0)
             else:
                 logger.debug(f"set to ignore sleep before sunset: {ignore_sleep}")
@@ -259,6 +263,8 @@ def on_message(client, topic, message):
                 logger.debug("blanking pixels")
                 blank_all()
                 logger.debug("it's sunrise, sleeping before sunset")
+                on_board_pixel.fill((0, 0, 0))
+                on_board_pixel.show()
                 alarmsHelper.shutdown(time_diff, 0)
             else:
                 logger.debug(f"set to ignore shutdown: {ignore_shutdown}")
