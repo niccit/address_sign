@@ -209,7 +209,6 @@ __marimo__/
 /settings.toml
 /.idea
 /solar_panel_mount_rod.stl
-/test.py
 /panel.stl
 /panel_base.mlp
 /circuitpy_node_red_flow.json
