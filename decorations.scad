@@ -14,6 +14,13 @@ module plumeria() {
     }
 }
 
+module mermaid() {
+    difference() {
+        import("images/decorations/mermaid.stl");
+    }
+    color("blue")translate([0, 0, 15])rotate([180, 0, 0])pinhole(h=10, r=4, tight=false);
+}
+
 // Seagrass decoration
 module seagrass() {
     union() {
@@ -23,8 +30,12 @@ module seagrass() {
 }
 
 // Tacks to cover decoration pinholes when not being used
-module tacks() {
-    pintack(h=10, r=4, bh=2, br=6);
+module tacks(h=10, r=4) {
+    pintack(h=h, r=r, bh=2, br=6);
+}
+
+module pinpegs(h=10, r=4) {
+    pinpeg(h=h, r=4);
 }
 
 // hanger for securing sign to mailbox
@@ -46,4 +57,4 @@ module hooks() {
     }
 }
 
-seagrass();
+mermaid();
